@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地圖範圍選擇器</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Leaflet.draw CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <!-- Awesome Icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" />
+    <style>
+        .element-hidden {
+            display: none !important;
+        }
+
+        center {
+            text-align: left;
+        }
+
+        /* Reset & Base */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            min-height: 100vh;
+            padding: 16px;
+            color: #1f2937;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(12px);
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            color: #111827;
+            font-size: 1.875rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header .subtitle {
+            color: #6b7280;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        /* Main Content - Single Column for Map */
+        .main-content {
+            flex: 1;
+        }
+
+        /* Map Section */
+        .map-container {
+            height: 73vh !important;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+            border-radius: 16px;
+        }
+
+        /* Map Control Panel (top-left) */
+        .map-control-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 320px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            color: #111827;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        /* 統一摺疊圖標樣式 */
+        .panel-title .instructions-collapse,
+        .panel-title .scope-info-collapse,
+        .panel-title .markers-collapse {
+            color: #4f46e5;
+            font-size: 0.9rem;
+            transition: transform 0.3s ease;
+        }
+
+        .panel-title .instructions-collapse.collapsed,
+        .panel-title .scope-info-collapse.collapsed,
+        .panel-title .markers-collapse.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        /* Instructions */
+        .instructions {
+            background: linear-gradient(135deg, #f3f4f6 0%, #f9fafb 100%);
+            padding: 16px;
+            border-radius: 10px;
+            border-left: 4px solid #4f46e5;
+            margin-bottom: 20px;
+            max-height: 300px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease, margin-bottom 0.3s ease;
+        }
+
+        .instructions.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-bottom: 0;
+            padding: 0;
+            border: none;
+        }
+
+        .instructions p {
+            margin-bottom: 10px;
+            color: #374151;
+            line-height: 1.5;
+            font-size: 0.9rem;
+            position: relative;
+            padding-left: 18px;
+        }
+
+        .instructions p:last-child {
+            margin-bottom: 0;
+        }
+
+        .instructions p::before {
+            content: "•";
+            color: #4f46e5;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        /* Scope Info */
+        .scope-info {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 10px;
+            box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+            animation: fadeIn 0.3s ease-out;
+            max-height: 500px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease, margin-bottom 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .scope-info.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-bottom: 0;
+            padding: 0;
+            border: none;
+            overflow: hidden;
+        }
+
+        /* Markers Section */
+        .markers-section {
+            background: linear-gradient(135deg, #f3f4f6 0%, #f9fafb 100%);
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            max-height: 500px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease, margin-bottom 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .markers-section.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-bottom: 0;
+            padding: 0;
+            border: none;
+            overflow: hidden;
+        }
+
+        .markers-header {
+            padding: 16px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .markers-count {
+            font-size: 0.85rem;
+            color: #6b7280;
+            background: #e5e7eb;
+            padding: 4px 10px;
+            margin-right: 0px;
+            border-radius: 12px;
+        }
+
+        .markers-list {
+            max-height: 350px;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .marker-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .marker-item:hover {
+            background-color: #f8fafc;
+        }
+
+        .marker-item:last-child {
+            border-bottom: none;
+        }
+
+        .marker-title {
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .marker-title i {
+            color: #4f46e5;
+        }
+
+        .marker-coordinates {
+            font-size: 0.8rem;
+            color: #6b7280;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+
+        .no-markers {
+            padding: 24px 16px;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 0.9rem;
+        }
+
+        .no-markers i {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            display: block;
+            color: #d1d5db;
+        }
+
+        .markers-loading {
+            padding: 24px 16px;
+            text-align: center;
+            color: #6b7280;
+        }
+
+        .markers-loading .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #4f46e5;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .scope-info-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .scope-info-title::before {
+            content: "📍";
+            font-size: 1.1rem;
+        }
+
+        .scope-coordinates {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.8rem;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            line-height: 1.5;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .scope-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .scope-area-value {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #fbbf24;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 30px 16px;
+            color: #9ca3af;
+            background: rgba(249, 250, 251, 0.8);
+            border-radius: 10px;
+            border: 2px dashed #d1d5db;
+            margin-bottom: 20px;
+        }
+
+        .empty-state::before {
+            content: "⬇️";
+            font-size: 1.5rem;
+            display: block;
+            margin-bottom: 12px;
+        }
+
+        .empty-state p {
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* Custom Clear All Button */
+        .clear-all-btn {
+            position: absolute;
+            bottom: 60px;
+            left: 10px;
+            z-index: 1000;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 16px;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .clear-all-btn.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .clear-all-btn:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+        }
+
+        .clear-all-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Mobile Toggle Button */
+        .mobile-toggle {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            padding: 10px 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #4f46e5;
+        }
+
+        /* Panel Close Button - Inside panel */
+        .panel-close-btn {
+            display: none;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            align-items: center;
+            gap: 6px;
+            z-index: 1002;
+        }
+
+        /* Panel Overlay */
+        .panel-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1998;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .panel-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.875rem;
+            padding: 20px;
+            margin-top: auto;
+        }
+
+        /* Custom Marker Popup */
+        .marker-popup .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .marker-popup .leaflet-popup-content {
+            margin: 12px 16px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .marker-popup .leaflet-popup-content h3 {
+            margin: 0 0 8px 0;
+            color: #4f46e5;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .marker-popup .leaflet-popup-content p {
+            margin: 6px 0;
+            color: #4b5563;
+        }
+
+        /* Mobile Optimizations */
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+                background: #4f46e5;
+            }
+
+            .container {
+                gap: 16px;
+            }
+
+            .header {
+                padding: 16px;
+                border-radius: 12px;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .map-container {
+                height: 400px;
+                border-radius: 12px;
+            }
+
+            /* 重新設計控制面板為全屏側滑面板 */
+            .map-control-panel {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                max-width: 100%;
+                max-height: 100%;
+                border-radius: 0;
+                z-index: 2000;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                overflow-y: auto;
+                padding: 60px 20px 20px 20px;
+                width: 85%;
+                max-width: 400px;
+                background: rgba(255, 255, 255, 0.98);
+                backdrop-filter: blur(20px);
+                box-shadow: 5px 0 25px rgba(0, 0, 0, 0.2);
+            }
+
+            .map-control-panel.mobile-visible {
+                transform: translateX(0);
+            }
+
+            /* 修改 mobile-toggle 為固定位置 */
+            .mobile-toggle {
+                display: block;
+                /* position: fixed; */
+                /* top: 20px; */
+                /* left: 20px; */
+                z-index: 2001;
+                /* 高於控制面板 */
+                background: rgba(255, 255, 255, 0.95);
+                border-radius: 8px;
+                padding: 12px 16px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                cursor: pointer;
+                font-size: 1rem;
+                font-weight: 600;
+                color: #4f46e5;
+            }
+
+            /* 顯示面板內的關閉按鈕 */
+            .panel-close-btn {
+                display: flex;
+            }
+
+            .instructions p {
+                font-size: 0.85rem;
+                padding-left: 16px;
+            }
+
+            .scope-coordinates {
+                font-size: 0.75rem;
+                padding: 10px;
+            }
+
+            .scope-area-value {
+                font-size: 1rem;
+            }
+
+            .clear-all-btn {
+                bottom: 50px;
+                left: 10px;
+                padding: 12px 20px;
+                font-size: 1rem;
+            }
+
+            /* Adjust Leaflet controls */
+            .leaflet-top.leaflet-left {
+                top: 50px !important;
+            }
+
+            .leaflet-bottom.leaflet-left {
+                bottom: 40px !important;
+            }
+        }
+
+        /* Desktop Enhancements */
+        @media (min-width: 769px) {
+
+            /* 在桌面設備隱藏 overlay 和關閉按鈕 */
+            .panel-overlay {
+                display: none !important;
+            }
+
+            .panel-close-btn {
+                display: none !important;
+            }
+
+            .mobile-toggle {
+                display: none !important;
+            }
+        }
+
+        @media (min-width: 1200px) {
+            .map-container {
+                height: 600px;
+            }
+        }
+
+        /* Leaflet Customizations */
+        .leaflet-control-layers {
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .leaflet-draw-toolbar {
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .leaflet-draw-toolbar a {
+            border-radius: 6px !important;
+        }
+
+        /* Hide edit toolbar (Save, Cancel, Delete options) */
+        .leaflet-draw-toolbar.leaflet-bar.leaflet-draw-toolbar-top.leaflet-draw-toolbar-notop.leaflet-draw-toolbar-nobottom {
+            display: none !important;
+        }
+
+        /* Hide zoom control from topleft */
+        .leaflet-control-zoom {
+            display: none !important;
+        }
+
+        /* Position draw control at bottomleft */
+        .leaflet-draw.leaflet-control {
+            bottom: 10px !important;
+            left: 10px !important;
+            top: auto !important;
+            right: auto !important;
+        }
+
+        .leaflet-draw-toolbar {
+            margin-bottom: 0 !important;
+        }
+
+        /* Smooth Transitions */
+        * {
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>地圖範圍選擇器</h1>
+        </header>
+        <main class="main-content">
+            <section class="map-container">
+                <div class="mobile-toggle" id="mobile-toggle">
+                    <i class="fas fa-bars"></i> 控制面板
+                </div>
+                <div id="map"></div>
+                <!-- Clear All Button -->
+                <button id="clear-all-btn" class="clear-all-btn">
+                    <i class="fas fa-trash-alt"></i> 清除所有範圍
+                </button>
+                <aside class="map-control-panel" id="control-panel">
+                    <!-- Panel Close Button for Mobile -->
+                    <button class="panel-close-btn" id="panel-close-btn">
+                        <i class="fas fa-times"></i> 關閉
+                    </button>
+                    <div class="control-section">
+                        <h2 class="panel-title" id="instructions-toggle">
+                            使用指引
+                            <span class="instructions-collapse" id="collapse-icon-instructions">
+                                <i class="fas fa-caret-down"></i>
+                            </span>
+                        </h2>
+                        <div class="instructions" id="instructions">
+                            <p><strong>繪製範圍：</strong>點擊矩形工具（左下角），然後在地圖上點擊並拖動</p>
+                            <p><strong>刪除範圍：</strong>點擊「清除所有範圍」按鈕（左下角）以移除矩形</p>
+                            <p><strong>取消繪製：</strong>按下 ESC 鍵或點擊地圖其他位置</p>
+                            <p><strong>標記點：</strong>在地圖上繪製矩形範圍後，系統會自動載入該範圍內的標記點</p>
+                            <p>同一時間只能有一個活動矩形，新的矩形會替換舊的。</p>
+                        </div>
+                    </div>
+                    <div class="control-section">
+                        <h2 class="panel-title" id="scope-info-toggle">
+                            範圍資訊
+                            <span class="scope-info-collapse" id="collapse-icon-scope-info">
+                                <i class="fas fa-caret-down"></i>
+                            </span>
+                        </h2>
+                        <div id="scope-info" class="scope-info" style="display: none;">
+                            <div class="scope-info-title">已選擇範圍</div>
+                            <div id="scope-coordinates" class="scope-coordinates">
+                                北界: --°<br>
+                                南界: --°<br>
+                                東界: --°<br>
+                                西界: --°
+                            </div>
+                            <div class="scope-area">
+                                <span>估算面積：</span>
+                                <span id="scope-area-value" class="scope-area-value">-- 平方公里</span>
+                            </div>
+                        </div>
+                        <div id="empty-state" class="empty-state">
+                            <p>在地圖上繪製矩形範圍，此處將顯示相關資訊。</p>
+                        </div>
+                    </div>
+                    <div class="control-section">
+                        <h2 class="panel-title" id="markers-toggle">
+                            <div>
+                                標記點列表
+                                <span id="markers-count" class="markers-count">0</span>
+                            </div>
+                            <span class="markers-collapse" id="collapse-icon-markers">
+                                <i class="fas fa-caret-down"></i>
+                            </span>
+                        </h2>
+                        <div id="markers-section" class="markers-section">
+                            <div class="markers-header">
+                                <span>已載入標記點</span>
+                                <button id="refresh-markers-btn" class="refresh-btn" title="重新載入標記點">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div id="markers-list" class="markers-list">
+                                <div class="markers-loading" id="markers-loading" style="display: none;">
+                                    <div class="spinner"></div>
+                                    <p>正在載入標記點...</p>
+                                </div>
+                                <div class="no-markers" id="no-markers">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                    <p>請在地圖上繪製矩形範圍以載入標記點</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+                <!-- Panel Overlay for Mobile -->
+                <div class="panel-overlay" id="panel-overlay"></div>
+            </section>
+        </main>
+        <footer class="footer">
+            <p>地圖範圍選擇器 | 支援桌面及流動裝置</p>
+        </footer>
+    </div>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Leaflet.draw JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script>
+        window.__gc__ = {
+            DEFAULT: {
+                COORDINATE: {
+                    lat: 22.3023,
+                    lng: 114.1745,
+                    zoom: 15
+                }
+            }
+        };
+
+        // 初始化地圖，移除預設縮放控制
+        const map = L.map('map', {
+            zoomControl: false, // 移除預設縮放控制
+            attributionControl: true
+        }).setView(
+            [
+                window.__gc__.DEFAULT.COORDINATE.lat,
+                window.__gc__.DEFAULT.COORDINATE.lng
+            ],
+            window.__gc__.DEFAULT.COORDINATE.zoom
+        ); // 預設中心為香港
+
+        // 添加自定義縮放控制至左下角
+        L.control.zoom({
+            position: 'bottomleft'
+        }).addTo(map);
+
+        // 添加地圖圖層
+        const tileLayers = {
+            "開放街道地圖": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+                maxZoom: 19,
+                subdomains: ['a', 'b', 'c']
+            }),
+            "衛星圖像": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '© Esri',
+                maxZoom: 19
+            }),
+            "地形圖": L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenTopoMap',
+                maxZoom: 17
+            })
+        };
+
+        // 添加預設地圖圖層
+        tileLayers["開放街道地圖"].addTo(map);
+
+        // 添加圖層控制至左上角
+        L.control.layers(tileLayers, null, {
+            collapsed: true,
+            position: 'topleft'
+        }).addTo(map);
+
+        // 初始化繪製項目圖層
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        // 初始化標記點圖層
+        const markersLayer = new L.FeatureGroup();
+        map.addLayer(markersLayer);
+
+        // 追蹤當前範圍
+        let currentScope = null;
+
+        // 獲取 UI 元素
+        const clearAllBtn = document.getElementById('clear-all-btn');
+        const refreshMarkersBtn = document.getElementById('refresh-markers-btn');
+
+        // 在左下角初始化繪製控制 - 無編輯模式
+        const drawControl = new L.Control.Draw({
+            position: 'bottomleft',
+            draw: {
+                polygon: false,
+                polyline: false,
+                circle: false,
+                circlemarker: false,
+                marker: false,
+                rectangle: {
+                    shapeOptions: {
+                        color: '#4f46e5',
+                        weight: 3,
+                        fillColor: '#4f46e5',
+                        fillOpacity: 0.15,
+                        dashArray: '8, 4'
+                    },
+                    repeatMode: false,
+                    metric: true
+                }
+            },
+            // 完全禁用編輯工具欄
+            edit: false
+        });
+
+        // 將繪製控制添加到地圖
+        map.addControl(drawControl);
+
+        // 清除所有範圍按鈕功能
+        clearAllBtn.addEventListener('click', function () {
+            // 清除所有繪製項目
+            drawnItems.clearLayers();
+            // 清除所有標記點
+            markersLayer.clearLayers();
+            currentScope = null;
+
+            // 更新 UI
+            const scopeInfo = document.getElementById('scope-info');
+            const emptyState = document.getElementById('empty-state');
+            scopeInfo.style.display = 'none';
+            scopeInfo.classList.remove('collapsed');
+            document.getElementById('collapse-icon-scope-info').classList.remove('collapsed');
+            document.getElementById('collapse-icon-scope-info').innerHTML = '<i class="fas fa-caret-down"></i>';
+            emptyState.style.display = 'block';
+
+            // 更新標記點列表
+            updateMarkersList();
+
+            // 隱藏清除按鈕
+            clearAllBtn.classList.remove('visible');
+
+            // 顯示反饋訊息
+            showNotification('矩形範圍和標記點已成功清除！', 'success');
+        });
+
+        // 重新載入標記點按鈕功能
+        refreshMarkersBtn.addEventListener('click', function () {
+            if (currentScope) {
+                const bounds = currentScope.getBounds();
+                fetchMarkersForBounds(bounds);
+            } else {
+                showNotification('請先在地圖上繪製範圍', 'info');
+            }
+        });
+
+        // 顯示通知功能
+        function showNotification(message, type = 'info') {
+            // 移除現有通知
+            const existingNotification = document.querySelector('.notification');
+            if (existingNotification) {
+                existingNotification.remove();
+            }
+
+            // 創建通知元素
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+                <span>${message}</span>
+            `;
+
+            // 設定通知樣式
+            Object.assign(notification.style, {
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                backgroundColor: type === 'success' ? '#10b981' : '#3b82f6',
+                color: 'white',
+                padding: '12px 20px',
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                zIndex: '3000', // 高於所有其他元素
+                animation: 'slideIn 0.3s ease-out'
+            });
+
+            // 添加到文檔
+            document.body.appendChild(notification);
+
+            // 3秒後移除
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+
+            // 添加 CSS 動畫
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // 可摺疊指引功能
+        const instructionsToggle = document.getElementById('instructions-toggle');
+        const instructions = document.getElementById('instructions');
+        const collapseIconInstructions = document.getElementById('collapse-icon-instructions');
+        let instructionsCollapsed = false;
+
+        instructionsToggle.addEventListener('click', () => {
+            instructionsCollapsed = !instructionsCollapsed;
+            instructions.classList.toggle('collapsed', instructionsCollapsed);
+            collapseIconInstructions.classList.toggle('collapsed', instructionsCollapsed);
+            collapseIconInstructions.innerHTML = instructionsCollapsed ?
+                '<i class="fas fa-caret-right"></i>' :
+                '<i class="fas fa-caret-down"></i>';
+        });
+
+        // 範圍資訊摺疊功能
+        const scopeInfoToggle = document.getElementById('scope-info-toggle');
+        const scopeInfo = document.getElementById('scope-info');
+        const emptyState = document.getElementById('empty-state');
+        const collapseIconScopeInfo = document.getElementById('collapse-icon-scope-info');
+        let scopeInfoCollapsed = false;
+
+        scopeInfoToggle.addEventListener('click', () => {
+            // 只有當有範圍資訊時才可摺疊
+            if (scopeInfo.style.display !== 'none') {
+                scopeInfoCollapsed = !scopeInfoCollapsed;
+                scopeInfo.classList.toggle('collapsed', scopeInfoCollapsed);
+                collapseIconScopeInfo.classList.toggle('collapsed', scopeInfoCollapsed);
+                collapseIconScopeInfo.innerHTML = scopeInfoCollapsed ?
+                    '<i class="fas fa-caret-right"></i>' :
+                    '<i class="fas fa-caret-down"></i>';
+            } else if (emptyState.style.display !== 'none') {
+                // 當處於空狀態時，點擊無效果或顯示提示
+                showNotification('請先在地圖上繪製範圍以查看資訊', 'info');
+            }
+        });
+
+        // 標記點列表摺疊功能
+        const markersToggle = document.getElementById('markers-toggle');
+        const markersSection = document.getElementById('markers-section');
+        const collapseIconMarkers = document.getElementById('collapse-icon-markers');
+        let markersCollapsed = false;
+
+        markersToggle.addEventListener('click', () => {
+            markersCollapsed = !markersCollapsed;
+            markersSection.classList.toggle('collapsed', markersCollapsed);
+            collapseIconMarkers.classList.toggle('collapsed', markersCollapsed);
+            const icon = collapseIconMarkers.querySelector('i');
+            if (icon) {
+                icon.className = markersCollapsed ? 'fas fa-caret-right' : 'fas fa-caret-down';
+            }
+        });
+
+        // 流動裝置控制面板功能
+        const mobileToggle = document.getElementById('mobile-toggle');
+        const controlPanel = document.getElementById('control-panel');
+        const panelOverlay = document.getElementById('panel-overlay');
+        const panelCloseBtn = document.getElementById('panel-close-btn');
+        let panelVisible = window.innerWidth > 768; // 桌面裝置預設顯示
+
+        // 初始化面板狀態
+        if (window.innerWidth <= 768) {
+            controlPanel.classList.remove('mobile-visible');
+            panelVisible = false;
+            panelOverlay.classList.remove('visible');
+        }
+
+        // 切換面板顯示/隱藏
+        function togglePanel() {
+            panelVisible = !panelVisible;
+            controlPanel.classList.toggle('mobile-visible', panelVisible);
+            panelOverlay.classList.toggle('visible', panelVisible);
+
+            // 在流動裝置上，更新 mobile-toggle 文字（始終顯示 "控制面板"）
+            if (window.innerWidth <= 768) {
+                mobileToggle.innerHTML = '<i class="fas fa-bars"></i> 控制面板';
+                if (panelVisible) {
+                    mobileToggle.classList.add("element-hidden");
+                } else {
+                    mobileToggle.classList.remove("element-hidden");
+                }
+            }
+        }
+
+        // mobile-toggle 點擊事件
+        mobileToggle.addEventListener('click', togglePanel);
+
+        // 面板內的關閉按鈕點擊事件
+        panelCloseBtn.addEventListener('click', () => {
+            panelVisible = false;
+            controlPanel.classList.remove('mobile-visible');
+            panelOverlay.classList.remove('visible');
+            mobileToggle.classList.remove("element-hidden");
+        });
+
+        // 計算面積（平方公里）
+        function calculateArea(bounds) {
+            const latDiff = Math.abs(bounds.getNorth() - bounds.getSouth());
+            const lngDiff = Math.abs(bounds.getEast() - bounds.getWest());
+
+            // 近似轉換（1度 ≈ 111.32 公里於赤道）
+            const latKm = latDiff * 111.32;
+            const lngKm = lngDiff * 111.32 * Math.cos((bounds.getNorth() + bounds.getSouth()) * Math.PI / 360);
+            const area = latKm * lngKm;
+
+            if (area > 1000000) {
+                return `${(area / 1000000).toFixed(1)}百萬平方公里`;
+            } else if (area > 1000) {
+                return `${(area / 1000).toFixed(1)}千平方公里`;
+            } else {
+                return `${area.toFixed(2)} 平方公里`;
+            }
+        }
+
+        // 更新範圍資訊顯示
+        function updateScopeInfo(bounds) {
+            const scopeInfo = document.getElementById('scope-info');
+            const emptyState = document.getElementById('empty-state');
+            const coordinates = document.getElementById('scope-coordinates');
+            const areaValue = document.getElementById('scope-area-value');
+
+            const north = bounds.getNorth().toFixed(4);
+            const south = bounds.getSouth().toFixed(4);
+            const east = bounds.getEast().toFixed(4);
+            const west = bounds.getWest().toFixed(4);
+
+            coordinates.innerHTML = `
+                北界: <strong>${north}°</strong><br>
+                南界: <strong>${south}°</strong><br>
+                東界: <strong>${east}°</strong><br>
+                西界: <strong>${west}°</strong>
+            `;
+
+            areaValue.textContent = calculateArea(bounds);
+
+            scopeInfo.style.display = 'block';
+            scopeInfo.classList.remove('collapsed');
+            document.getElementById('collapse-icon-scope-info').classList.remove('collapsed');
+            document.getElementById('collapse-icon-scope-info').innerHTML = '<i class="fas fa-caret-down"></i>';
+            scopeInfoCollapsed = false;
+            emptyState.style.display = 'none';
+
+            // 顯示清除按鈕
+            clearAllBtn.classList.add('visible');
+
+            // 在流動裝置選擇範圍時自動顯示面板
+            if (window.innerWidth <= 768 && !panelVisible) {
+                togglePanel();
+            }
+        }
+
+        // 從WFS服務獲取標記點數據
+        async function fetchMarkersForBounds(bounds) {
+            // 顯示載入狀態
+            const markersLoading = document.getElementById('markers-loading');
+            const noMarkers = document.getElementById('no-markers');
+            const markersList = document.getElementById('markers-list');
+
+            markersLoading.style.display = 'block';
+            markersList.innerHTML = '';
+            markersList.appendChild(markersLoading);
+            markersList.appendChild(noMarkers);
+
+            // 構建URL參數
+            const minLat = bounds.getSouth();
+            const minLng = bounds.getWest();
+            const maxLat = bounds.getNorth();
+            const maxLng = bounds.getEast();
+
+            // 限制特徵數量為3個（根據API要求）
+            const maxFeatures = 300;
+
+            // 構建WFS請求URL
+            const wfsUrl = `https://cors-anywhere.herokuapp.com/https://portal.csdi.gov.hk/server/services/common/td_rcd_1671693428549_89372/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=points&outputFormat=geojson&maxFeatures=${maxFeatures}&srsName=EPSG:4326&filter=%3CFilter%3E%3CIntersects%3E%3CPropertyName%3ESHAPE%3C/PropertyName%3E%3Cgml:Envelope%20srsName=%27EPSG:4326%27%3E%3Cgml:lowerCorner%3E${minLat} ${minLng}%3C/gml:lowerCorner%3E%3Cgml:upperCorner%3E${maxLat} ${maxLng}%3C/gml:upperCorner%3E%3C/gml:Envelope%3E%3C/Intersects%3E%3C/Filter%3E`;
+
+            try {
+                // 清除現有標記點
+                markersLayer.clearLayers();
+
+                // 使用CORS代理獲取數據
+                const response = await fetch(wfsUrl);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const geoJsonData = await response.json();
+
+                // 隱藏載入狀態
+                markersLoading.style.display = 'none';
+
+                // 處理返回的數據
+                if (geoJsonData.features && geoJsonData.features.length > 0) {
+                    // 顯示標記點數量
+                    document.getElementById('markers-count').textContent = geoJsonData.features.length;
+
+                    // 將特徵轉換為Leaflet圖層
+                    const geoJsonLayer = L.geoJSON(geoJsonData, {
+                        pointToLayer: function (feature, latlng) {
+                            // 創建自定義標記點圖標
+                            const markerIcon = L.divIcon({
+                                className: 'custom-marker',
+                                html: `<div style="background-color: #ef4444; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"><i class="fas fa-map-marker-alt"></i></div>`,
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 24]
+                            });
+
+                            // 創建標記點
+                            const marker = L.marker(latlng, { icon: markerIcon });
+
+                            // 添加彈出窗口
+                            const properties = feature.properties || {};
+                            let popupContent = '<div class="marker-popup">';
+                            popupContent += '<h3>標記點</h3>';
+
+                            // 添加屬性信息
+                            for (const [key, value] of Object.entries(properties)) {
+                                if (value && typeof value === 'string' && value.trim() !== '') {
+                                    popupContent += `<p><strong>${key}:</strong> ${value}</p>`;
+                                }
+                            }
+
+                            // 添加坐標信息
+                            popupContent += `<p><strong>緯度:</strong> ${latlng.lat.toFixed(6)}°</p>`;
+                            popupContent += `<p><strong>經度:</strong> ${latlng.lng.toFixed(6)}°</p>`;
+                            popupContent += '</div>';
+
+                            marker.bindPopup(popupContent);
+
+                            return marker;
+                        }
+                    });
+
+                    // 添加到標記點圖層
+                    markersLayer.addLayer(geoJsonLayer);
+
+                    // 調整地圖視圖以包含所有標記點和矩形
+                    const allBounds = L.latLngBounds(
+                        geoJsonLayer.getBounds(),
+                        bounds
+                    );
+                    map.fitBounds(allBounds, { padding: [60, 60] });
+
+                    // 更新標記點列表
+                    updateMarkersList(geoJsonData.features);
+
+                    // 顯示成功通知
+                    showNotification(`已載入 ${geoJsonData.features.length} 個標記點`, 'success');
+                } else {
+                    // 沒有數據
+                    document.getElementById('markers-count').textContent = '0';
+                    updateMarkersList([]);
+                    showNotification('在該範圍內未找到標記點', 'info');
+                }
+            } catch (error) {
+                console.error('獲取標記點數據時出錯:', error);
+                markersLoading.style.display = 'none';
+                document.getElementById('markers-count').textContent = '0';
+                updateMarkersList([]);
+                showNotification('載入標記點時發生錯誤', 'error');
+            }
+        }
+
+        // 更新標記點列表
+        function updateMarkersList(features = []) {
+            const markersList = document.getElementById('markers-list');
+            const noMarkers = document.getElementById('no-markers');
+
+            // 清除現有列表
+            markersList.innerHTML = '';
+
+            if (features.length > 0) {
+                noMarkers.style.display = 'none';
+
+                // 添加每個標記點到列表
+                features.forEach((feature, index) => {
+                    const properties = feature.properties || {};
+                    const coordinates = feature.geometry?.coordinates || [];
+
+                    const markerItem = document.createElement('div');
+                    markerItem.className = 'marker-item';
+                    markerItem.dataset.index = index;
+
+                    // 提取名稱或使用默認
+                    let title = '標記點';
+                    if (properties.name) {
+                        title = properties.name;
+                    } else if (properties.NAME) {
+                        title = properties.NAME;
+                    } else if (properties.Name) {
+                        title = properties.Name;
+                    }
+
+                    // 提取其他有用信息
+                    let description = '';
+                    for (const [key, value] of Object.entries(properties)) {
+                        if (key.toLowerCase() !== 'name' && value && typeof value === 'string' && value.trim() !== '') {
+                            description += `${key}: ${value}<br>`;
+                        }
+                    }
+
+                    // 格式化坐標
+                    let lat = '--';
+                    let lng = '--';
+                    if (coordinates.length >= 2) {
+                        lng = coordinates[0].toFixed(6);
+                        lat = coordinates[1].toFixed(6);
+                    }
+
+                    markerItem.innerHTML = `
+                        <div class="marker-title">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>${title}</span>
+                        </div>
+                        <div class="marker-coordinates">
+                            緯度: ${lat}°<br>
+                            經度: ${lng}°
+                        </div>
+                    `;
+
+                    // 點擊標記點項目時，定位到該標記點
+                    markerItem.addEventListener('click', () => {
+                        if (coordinates.length >= 2) {
+                            const latlng = [coordinates[1], coordinates[0]];
+                            map.setView(latlng, 17);
+
+                            // 打開標記點的彈出窗口
+                            markersLayer.eachLayer((layer) => {
+                                if (layer.getLatLng &&
+                                    layer.getLatLng().lat.toFixed(6) === lat &&
+                                    layer.getLatLng().lng.toFixed(6) === lng) {
+                                    layer.openPopup();
+                                }
+                            });
+                        }
+                    });
+
+                    markersList.appendChild(markerItem);
+                });
+
+                // 更新標記點數量顯示
+                document.getElementById('markers-count').textContent = features.length;
+            } else {
+                noMarkers.style.display = 'block';
+                markersList.appendChild(noMarkers);
+                document.getElementById('markers-count').textContent = '0';
+            }
+        }
+
+        // 處理矩形創建
+        map.on(L.Draw.Event.CREATED, function (event) {
+            // 移除任何現有矩形
+            drawnItems.clearLayers();
+
+            const rectangle = event.layer;
+            drawnItems.addLayer(rectangle);
+            currentScope = rectangle;
+
+            // 更新範圍資訊
+            const bounds = rectangle.getBounds();
+            updateScopeInfo(bounds);
+
+            // 獲取該範圍內的標記點
+            fetchMarkersForBounds(bounds);
+
+            // 調整地圖顯示矩形範圍（帶邊距）
+            map.fitBounds(bounds, {
+                padding: [60, 60],
+                maxZoom: 19
+            });
+
+            // 顯示成功通知
+            showNotification('矩形範圍已成功創建！正在載入標記點...', 'success');
+        });
+
+        // 處理 ESC 鍵取消繪製
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && map._drawToolbar) {
+                map._drawToolbar.disable();
+                showNotification('繪製已取消', 'info');
+            }
+        });
+
+        // 為流動裝置優化
+        function optimizeForMobile() {
+            const isMobile = window.innerWidth <= 768;
+
+            if (isMobile) {
+                // 流動裝置優化
+                const instructionsP = document.querySelectorAll('.instructions p');
+                if (instructionsP.length >= 4) {
+                    instructionsP[0].innerHTML = '<strong>繪製範圍：</strong>點擊矩形工具（左下角），然後在地圖上拖動';
+                    instructionsP[1].innerHTML = '<strong>刪除範圍：</strong>點擊「清除所有範圍」按鈕（左下角）';
+                    instructionsP[2].innerHTML = '<strong>取消繪製：</strong>按下 ESC 或點擊其他位置';
+                    instructionsP[3].innerHTML = '<strong>標記點：</strong>繪製範圍後自動載入標記點';
+                }
+
+                // 確保面板在流動裝置上初始狀態正確
+                controlPanel.classList.remove('mobile-visible');
+                panelOverlay.classList.remove('visible');
+                panelVisible = false;
+            } else {
+                // 桌面指引
+                const instructionsP = document.querySelectorAll('.instructions p');
+                if (instructionsP.length >= 4) {
+                    instructionsP[0].innerHTML = '<strong>繪製範圍：</strong>點擊矩形工具（左下角），然後點擊並拖動';
+                    instructionsP[1].innerHTML = '<strong>刪除範圍：</strong>點擊「清除所有範圍」按鈕（左下角）';
+                    instructionsP[2].innerHTML = '<strong>取消繪製：</strong>按下 ESC 鍵或點擊地圖其他位置';
+                    instructionsP[3].innerHTML = '<strong>標記點：</strong>在地圖上繪製矩形範圍後，系統會自動載入該範圍內的標記點';
+                }
+
+                // 確保面板在桌面上始終顯示
+                controlPanel.classList.add('mobile-visible');
+                panelVisible = true;
+            }
+
+            // 確保地圖正確渲染
+            setTimeout(() => map.invalidateSize(), 100);
+        }
+
+        // 初始化
+        window.addEventListener('load', () => {
+            optimizeForMobile();
+
+            // 為首次使用者顯示歡迎訊息
+            if (!localStorage.getItem('mapScopeTutorialShown')) {
+                setTimeout(() => {
+                    alert("歡迎使用地圖範圍選擇器！\n\n• 使用矩形工具（左下角）繪製範圍\n• 點擊「清除所有範圍」按鈕以移除矩形\n• 同一時間只能有一個活動矩形\n• 按下 ESC 以取消繪製\n• 在流動裝置上點擊「控制面板」以切換面板\n• 繪製範圍後，系統會自動載入該範圍內的標記點");
+                    localStorage.setItem('mapScopeTutorialShown', 'true');
+                }, 500);
+            }
+        });
+
+        // 處理視窗大小調整
+        window.addEventListener('resize', () => {
+            optimizeForMobile();
+        });
+    </script>
+</body>
+
+</html>
